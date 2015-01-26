@@ -12,6 +12,7 @@ package ir;
 
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Set;
 
 
 /**
@@ -27,9 +28,13 @@ public class HashedIndex implements Index {
      *  Inserts this token in the index.
      */
     public void insert( String token, int docID, int offset ) {
-	//
-	//  YOUR CODE HERE
-	//
+	//Check if Postingslist is null
+        if(index.get(token) == null){
+            index.put(token, new PostingsList()); 
+        }
+        else{
+            index.get(token).add(new PostingsEntry(docID, 0)); //TODO 0 is temporary!!
+        }
     }
 
 
@@ -37,10 +42,10 @@ public class HashedIndex implements Index {
      *  Returns all the words in the index.
      */
     public Iterator<String> getDictionary() {
-	// 
-	//  REPLACE THE STATEMENT BELOW WITH YOUR CODE
-	//
-	return null;
+	Set<String> dictionary = index.keySet(); 
+        Iterator wordsIterator = dictionary.iterator(); 
+        
+        return wordsIterator;
     }
 
 
@@ -49,10 +54,7 @@ public class HashedIndex implements Index {
      *  if the term is not in the index.
      */
     public PostingsList getPostings( String token ) {
-	// 
-	//  REPLACE THE STATEMENT BELOW WITH YOUR CODE
-	//
-	return null;
+	return index.get(token);
     }
 
 
@@ -60,10 +62,7 @@ public class HashedIndex implements Index {
      *  Searches the index for postings matching the query.
      */
     public PostingsList search( Query query, int queryType, int rankingType, int structureType ) {
-	// 
-	//  REPLACE THE STATEMENT BELOW WITH YOUR CODE
-	//
-	return null;
+	return index.get(query.terms.getFirst());
     }
 
 

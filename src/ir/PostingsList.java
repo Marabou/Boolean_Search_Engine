@@ -29,10 +29,16 @@ public class PostingsList implements Serializable {
     public PostingsEntry get( int i ) {
 	return list.get( i );
     }
-
-    //
-    //  YOUR CODE HERE
-    //
+    
+    /**
+     * Adds a posting as docID to the list 
+     **/
+    public void add(PostingsEntry p){
+        //Only add if not already in list
+        if(list.size() == 0 || list.getLast().docID != p.docID) {
+            list.add(p); 
+        } 
+    }
 }
 	
 
