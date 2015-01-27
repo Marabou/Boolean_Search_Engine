@@ -10,6 +10,7 @@ package ir;
 
 import java.util.LinkedList;
 import java.io.Serializable;
+import java.util.Iterator;
 
 /**
  *   A list of postings for a given word.
@@ -23,6 +24,14 @@ public class PostingsList implements Serializable {
     /**  Number of postings in this list  */
     public int size() {
 	return list.size();
+    }
+    
+    /**
+     * Returns iterator for postingslist
+     * @return 
+     */
+    public Iterator getIterator(){
+        return list.listIterator();
     }
 
     /**  Returns the ith posting */
