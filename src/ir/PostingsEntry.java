@@ -9,15 +9,18 @@
 package ir;
 
 import java.io.Serializable;
+import java.util.HashSet;
 
 public class PostingsEntry implements Comparable<PostingsEntry>, Serializable {
     
     public int docID;
     public double score;
+    HashSet<Integer> positionsInDoc; 
 
     public PostingsEntry(int docID, int score){
         this.docID = docID; 
         this.score = score; 
+        this.positionsInDoc = new HashSet<>();
     }
     
     /**
@@ -30,7 +33,28 @@ public class PostingsEntry implements Comparable<PostingsEntry>, Serializable {
     public int compareTo( PostingsEntry other ) {
 	return Double.compare( other.score, score );
     }
-
+    
+    /**
+     * Adds a position to the positions set
+     * @param position 
+     */
+    public void addOffset(int position){
+        positionsInDoc.add(position); 
+    }
+    
+    /**
+     * Returns true if term is at given position
+     * @param position
+     * @return 
+     */
+    public boolean isAtPosition(int position){
+        return positionsInDoc.contains(position); 
+    }
+    
+    public HashSet<Integer> getOffsets(){
+        return positionsInDoc; 
+    }
+    
 }
 
     

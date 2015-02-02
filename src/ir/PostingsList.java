@@ -48,6 +48,10 @@ public class PostingsList implements Serializable {
             list.add(p); 
         } 
     }
+    
+    public LinkedList<PostingsEntry> getList(){
+        return list; 
+    }
 }
 	
 
