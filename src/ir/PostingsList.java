@@ -16,6 +16,7 @@ import java.util.Iterator;
  *   A list of postings for a given word.
  */
 public class PostingsList implements Serializable {
+    public static final long serialVersionUID = 1L;
     
     /** The postings list as a linked list. */
     private LinkedList<PostingsEntry> list = new LinkedList<PostingsEntry>();

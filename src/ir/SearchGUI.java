@@ -27,7 +27,8 @@ import javax.swing.event.*;
 public class SearchGUI extends JFrame {
 
     /**  The indexer creating the search index. */
-    Indexer indexer = new Indexer();
+    //Indexer indexer = new Indexer();
+    Indexer indexer; 
 
     /**  The query posed by the user, used in search() and relevanceFeedbackSearch() */
     private Query query; 
@@ -363,6 +364,13 @@ public class SearchGUI extends JFrame {
      */
     private void decodeArgs( String[] args ) {
 	int i=0, j=0;
+        
+        //Parameters
+        String indexPath = null; 
+        boolean writeToDisc = false; 
+        String readIndexPath = null; 
+        boolean readIndex = false; 
+        
 	while ( i < args.length ) {
 	    if ( "-d".equals( args[i] )) {
 		i++;
@@ -370,11 +378,23 @@ public class SearchGUI extends JFrame {
 		    dirNames.add( args[i++] );
 		}
 	    }
+            else if(args[i].equals("-i")){
+                writeToDisc = true; 
+                i++;
+                indexPath = args[i++]; 
+            }
+            else if(args[i].equals("-r")){
+                readIndex = true; 
+                i++;
+                readIndexPath = args[i++]; 
+            }
 	    else {
 		System.err.println( "Unknown option: " + args[i] );
 		break;
 	    }
 	}
+        
+        indexer = new Indexer(indexPath, writeToDisc, readIndexPath, readIndex); 
     }				    
 
 

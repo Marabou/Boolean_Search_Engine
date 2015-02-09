@@ -12,12 +12,14 @@ import java.io.Serializable;
 import java.util.HashSet;
 
 public class PostingsEntry implements Comparable<PostingsEntry>, Serializable {
+    public static final long serialVersionUID = 1l;
     
     public int docID;
     public double score;
     HashSet<Integer> positionsInDoc; 
 
     public PostingsEntry(int docID, int score){
+        
         this.docID = docID; 
         this.score = score; 
         this.positionsInDoc = new HashSet<>();

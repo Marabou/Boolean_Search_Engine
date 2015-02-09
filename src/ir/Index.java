@@ -38,6 +38,9 @@ public interface Index {
     public void insert( String token, int docID, int offset );
     public Iterator<String> getDictionary();
     public PostingsList getPostings( String token );
+    public void setNumberOfDocs(int n); 
+    public void finalFlushAndCloseStreams();
+
     public PostingsList search( Query query, int queryType, int rankingType, int structureType );
     public void cleanup();
 

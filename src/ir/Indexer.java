@@ -56,8 +56,8 @@ public class Indexer {
     /**
      *  Initializes the index as a HashedIndex.
      */
-    public Indexer() {
-	index = new HashedIndex();
+    public Indexer(String indexPath, boolean writeToDisc, String readIndexPath, boolean readIndex) {
+        index = new HashedIndex(indexPath, writeToDisc, readIndexPath, readIndex); 
     }
 
 
@@ -78,7 +78,8 @@ public class Indexer {
 		    for ( int i=0; i<fs.length; i++ ) {
 			processFiles( new File( f, fs[i] ));
 		    }
-		}
+                    index.finalFlushAndCloseStreams(); 
+		};
 	    } else {
 		//System.err.println( "Indexing " + f.getPath() );
 		// First register the document and get a docID

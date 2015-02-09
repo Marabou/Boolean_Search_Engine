@@ -10,12 +10,21 @@
 
 package ir;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 
 /**
@@ -25,35 +34,142 @@ public class HashedIndex implements Index {
 
     /** The index as a hashtable. */
     private HashMap<String,PostingsList> index = new HashMap<String,PostingsList>();
+    private HashMap<String,String> discIndex = new HashMap<String,String>(); //<word, filepath>
+    private HashMap<String,ObjectOutputStream> discIndexStreams = new HashMap<String,ObjectOutputStream>(); //<word, filepath>
+    
+    //Where to store the index
+    String indexFilePath = "index\\"; 
+    String readIndexPath = "index\\"; 
+    
+    //true if index should be written to disc
+    boolean writeToDisc = false;  
+    boolean readIndex = false; 
+    
+    //Used for indexing
+    int currentDoc; 
+    HashMap<String,PostingsEntry> entriesBuffer = new HashMap<String, PostingsEntry>(); 
+    HashSet<String> newFileWords = new HashSet<String>(); 
+    int numberOfDocs;
+    boolean lastDocument = false; 
 
 
+    
+    /**
+     * index = path to where index is saved
+     * 
+     * @param index
+     * @param writeToDisc 
+     */
+    public HashedIndex(String indexPath, boolean writeToDisc, String readIndexPath, boolean readIndex){
+        this.writeToDisc = writeToDisc;
+        this.readIndex = readIndex; 
+        if(indexPath != null) {
+            indexFilePath = this.readIndexPath + indexPath + "\\";
+        } 
+        if(readIndexPath != null) {
+            this.readIndexPath = this.readIndexPath + readIndexPath + "\\";
+        } 
+    }
     /**
      *  Inserts this token in the index.
      */
     public void insert( String token, int docID, int offset ) {
-        if(index.get(token) == null){
-            index.put(token, new PostingsList()); 
-            PostingsEntry tmpPosting = new PostingsEntry(docID, 0); //Score is 0 for now 
-            tmpPosting.addOffset(offset);
-            index.get(token).add(tmpPosting);
-            //System.out.println("doc: " + docID + " , token: " + token + ", offset: " +  offset); 
-
+        if(writeToDisc){
+            try { 
+                insertDisc(token, docID, offset);
+            } catch (IOException ex) {
+                Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (ClassNotFoundException ex) {
+                Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
         else{
-            if(index.get(token).get(index.get(token).size()-1).docID != docID){ //if it is a new doc, create new posting
-                PostingsEntry tmpPosting = new PostingsEntry(docID, 0); //Score is 0 for now
+            if(index.get(token) == null){ 
+                index.put(token, new PostingsList()); 
+                PostingsEntry tmpPosting = new PostingsEntry(docID, 0); //Score is 0 for now 
                 tmpPosting.addOffset(offset);
                 index.get(token).add(tmpPosting);
-                //System.out.println("doc: " + docID + " , token(IN): " + token + ", offset: " +  offset); 
+                //System.out.println("doc: " + docID + " , token: " + token + ", offset: " +  offset);
+
             }
             else{
-                index.get(token).get(index.get(token).size()-1).addOffset(offset);
-                //System.out.println("doc(IN): " + docID + " , token(IN): " + token + ", offset: " +  offset); 
+                if(index.get(token).get(index.get(token).size()-1).docID != docID){ //if it is a new doc, create new posting
+                    PostingsEntry tmpPosting = new PostingsEntry(docID, 0); //Score is 0 for now
+                    tmpPosting.addOffset(offset);
+                    index.get(token).add(tmpPosting);
+                    //System.out.println("doc: " + docID + " , token(IN): " + token + ", offset: " +  offset); 
+                }
+                else{
+                    index.get(token).get(index.get(token).size()-1).addOffset(offset);
+                    //System.out.println("doc(IN): " + docID + " , token(IN): " + token + ", offset: " +  offset); 
+                }
+
             }
-            
         }
     }
-
+    
+    /**
+     * Insert method when not storing the entire index in main memory. 
+     * @param token
+     * @param docID
+     * @param offset 
+     */
+    public void insertDisc( String token, int docID, int offset ) throws IOException, FileNotFoundException, ClassNotFoundException{
+        if(token.length() < 30){        //Cuz I can! 
+            if(docID != currentDoc){
+                flushEntries(); 
+                currentDoc = docID; 
+            }
+            if(discIndexStreams.get(token) == null){
+                discIndexStreams.put(token, new ObjectOutputStream(new FileOutputStream(indexFilePath+"_"+token)));
+                PostingsEntry tmpPosting = new PostingsEntry(docID, 0);
+                tmpPosting.addOffset(offset);
+                entriesBuffer.put(token, tmpPosting); 
+                newFileWords.add(token); 
+            }
+            else{
+                if(!entriesBuffer.containsKey(token)){
+                    PostingsEntry tmpPosting = new PostingsEntry(docID, 0);
+                    tmpPosting.addOffset(offset);
+                    entriesBuffer.put(token, tmpPosting); 
+                }
+                else{
+                    entriesBuffer.get(token).addOffset(offset);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Writes the postingentries to disc for the current file
+     */
+    public void flushEntries() throws FileNotFoundException, IOException, ClassNotFoundException{
+        for(String key: entriesBuffer.keySet()){
+            discIndexStreams.get(key).writeObject(entriesBuffer.get(key));
+            discIndexStreams.get(key).flush();
+        }
+        entriesBuffer = new HashMap<String, PostingsEntry>(); 
+    }
+    
+    @Override
+    public void finalFlushAndCloseStreams() {
+        try { 
+            flushEntries();
+        } catch (IOException ex) {
+            Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (ClassNotFoundException ex) {
+            Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        for(String key: discIndexStreams.keySet()){
+            try { 
+                discIndexStreams.get(key).flush(); 
+                discIndexStreams.get(key).close();
+                
+            } catch (IOException ex) {
+                Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
 
     /**
      *  Returns all the words in the index.
@@ -80,18 +196,62 @@ public class HashedIndex implements Index {
      */
     public PostingsList search( Query query, int queryType, int rankingType, int structureType ) {
         if(query.terms.size() == 1){
-            return index.get(query.terms.getFirst());
+            if(writeToDisc){
+                if(discIndexStreams.get(query.terms.getFirst()) != null){
+                    PostingsList tmpList = new PostingsList(); 
+                    try { 
+                        FileInputStream fIn = new FileInputStream(indexFilePath+"_"+(query.terms.getFirst()));
+                        ObjectInputStream oIn = new ObjectInputStream(fIn); 
+                        PostingsEntry tmpEntry = (PostingsEntry) oIn.readObject();
+                        while(tmpEntry != null){
+                            tmpList.add(tmpEntry);
+                            tmpEntry = (PostingsEntry) oIn.readObject();
+                        }
+                        
+                        return tmpList; 
+                    } catch (FileNotFoundException ex) {
+                        Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+                    } catch (IOException ex) {
+                        Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+                    } catch (ClassNotFoundException ex) {
+                        Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                }
+                else
+                    return new PostingsList(); 
+            }
+            else{
+                if(index.get(query.terms.getFirst()) != null)
+                    return index.get(query.terms.getFirst());
+                else
+                    return new PostingsList(); 
+            }
         }
-        else
+        else if(query.terms.size() > 1)
         {
             for(String term: query.terms){
-                if(index.get(term) == null){
-                    return new PostingsList(); 
+                if(writeToDisc){
+                    if(discIndexStreams.get(term) == null){
+                        return new PostingsList(); 
+                    }
+                }
+                else{
+                    if(index.get(term) == null){
+                        return new PostingsList(); 
+                    }
                 }
             }
             switch (queryType) {
-                case 0: //Intersection query
-                    return intersectionQuery(query, queryType, rankingType, structureType); 
+                case 0: {
+                try {
+                    //Intersection query
+                    return intersectionQuery(query, queryType, rankingType, structureType);
+                } catch (IOException ex) {
+                    Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ClassNotFoundException ex) {
+                    Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            } 
                 case 1: //Phrase query
                     return phraseQuery(query, queryType, rankingType, structureType); 
                 case 2: //Ranked query
@@ -100,13 +260,18 @@ public class HashedIndex implements Index {
                     return null; 
             }
         }
+        else
+            return new PostingsList();
+        
+        //Because Netbeans is forcing me :E 
+        return null;
     }
 
     
     /**
      *  Performs intersection query on several words
      */
-    private PostingsList intersectionQuery(Query query, int queryType, int rankingType, int structureType){
+    private PostingsList intersectionQuery(Query query, int queryType, int rankingType, int structureType) throws IOException, FileNotFoundException, ClassNotFoundException{
         return intersectionSearch(query.terms); 
     }
 
@@ -121,15 +286,45 @@ public class HashedIndex implements Index {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
 
-    private PostingsList intersectionSearch(LinkedList<String> wordsInQuery) {
+    private PostingsList intersectionSearch(LinkedList<String> wordsInQuery) throws FileNotFoundException, IOException, ClassNotFoundException {
         PostingsList postings = new PostingsList(); 
         int[] currentPostings = new int[wordsInQuery.size()]; 
         ArrayList<Iterator> postingsIterators = new ArrayList<Iterator>(); 
+        ArrayList<LinkedList<PostingsEntry>> postingsFromDisc = null; 
+        if(writeToDisc){
+            postingsFromDisc = new ArrayList<LinkedList<PostingsEntry>>(); 
+        }
         
         //Get iterators for each postingslist for each term
         int i = 0; 
         for(String searchWord: wordsInQuery){
-            postingsIterators.add(i, index.get(searchWord).getIterator());
+            if(writeToDisc){
+                LinkedList<PostingsEntry> list = new LinkedList<PostingsEntry>();
+                //FileInputStream fIn = new FileInputStream(discIndex.get(searchWord)); 
+                FileInputStream fIn = new FileInputStream(indexFilePath+"_"+searchWord);
+                //System.out.println("checking for file "+indexFilePath+"_"+searchWord); 
+                
+                ObjectInputStream oIn = new ObjectInputStream(fIn); 
+                PostingsEntry tmp = (PostingsEntry) oIn.readObject(); 
+                try{
+                    while(tmp != null){
+                        list.addLast(tmp); 
+                        tmp = (PostingsEntry) oIn.readObject(); 
+                    }
+                }
+                catch(Exception e){}
+                postingsFromDisc.add(i,list); 
+                postingsIterators.add(i, postingsFromDisc.get(i).iterator()); 
+                
+                //DEBUGZ0R
+                /*System.out.println("List size for " + searchWord + " " + list.size());
+                for(int k = 0; k < list.size(); k++){
+                    System.out.println("Document ID " + list.get(k).docID + " has word " + searchWord);
+                }*/
+            }
+            else{
+                postingsIterators.add(i, index.get(searchWord).getIterator());
+            }
             PostingsEntry tmpPostingsEntry = (PostingsEntry) postingsIterators.get(i).next();
             currentPostings[i] = tmpPostingsEntry.docID; 
             i++; 
@@ -255,5 +450,10 @@ public class HashedIndex implements Index {
             sb.append("\n"); 
         }
         return sb.toString(); 
+    }
+
+    @Override
+    public void setNumberOfDocs(int n) {
+        this.numberOfDocs = n; 
     }
 }
