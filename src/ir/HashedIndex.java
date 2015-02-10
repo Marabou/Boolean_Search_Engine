@@ -17,6 +17,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -60,15 +61,22 @@ public class HashedIndex implements Index {
      * @param index
      * @param writeToDisc 
      */
-    public HashedIndex(String indexPath, boolean writeToDisc, String readIndexPath, boolean readIndex){
+    public HashedIndex(String indexPath, boolean writeToDisc, String readIndexPath, boolean readIndex) throws IOException{
         this.writeToDisc = writeToDisc;
         this.readIndex = readIndex; 
+        if(readIndex) this.writeToDisc = true; 
         if(indexPath != null) {
-            indexFilePath = this.readIndexPath + indexPath + "\\";
+            indexFilePath = this.indexFilePath + indexPath + "\\";
+            this.readIndexPath = this.readIndexPath + indexPath + "\\";
         } 
         if(readIndexPath != null) {
             this.readIndexPath = this.readIndexPath + readIndexPath + "\\";
-        } 
+            this.indexFilePath = this.indexFilePath + readIndexPath + "\\";
+            
+        }
+        if(this.readIndex){
+            readIndex(); 
+        }
     }
     /**
      *  Inserts this token in the index.
@@ -114,7 +122,7 @@ public class HashedIndex implements Index {
      * @param docID
      * @param offset 
      */
-    public void insertDisc( String token, int docID, int offset ) throws IOException, FileNotFoundException, ClassNotFoundException{
+    private void insertDisc( String token, int docID, int offset ) throws IOException, FileNotFoundException, ClassNotFoundException{
         if(token.length() < 30){        //Cuz I can! 
             if(docID != currentDoc){
                 flushEntries(); 
@@ -171,6 +179,21 @@ public class HashedIndex implements Index {
         }
     }
 
+    
+    /**
+     * Called when there is already an index on disc
+     */
+    private void readIndex() throws FileNotFoundException, IOException {
+        File files = new File(readIndexPath);
+        if(files.isDirectory()){
+            int counter = 0; 
+            for(File f: files.listFiles()){
+                discIndexStreams.put(f.getName().substring(1),  null);
+                //discIndexStreams.get(f.getName().substring(1)).close(); 
+            }
+        }
+    }
+    
     /**
      *  Returns all the words in the index.
      */
@@ -197,16 +220,22 @@ public class HashedIndex implements Index {
     public PostingsList search( Query query, int queryType, int rankingType, int structureType ) {
         if(query.terms.size() == 1){
             if(writeToDisc){
-                if(discIndexStreams.get(query.terms.getFirst()) != null){
+                //if(discIndexStreams.get(query.terms.getFirst()) != null){
+                if(discIndexStreams.keySet().contains(query.terms.getFirst())){
                     PostingsList tmpList = new PostingsList(); 
                     try { 
-                        FileInputStream fIn = new FileInputStream(indexFilePath+"_"+(query.terms.getFirst()));
+                        FileInputStream fIn = new FileInputStream(readIndexPath +"_"+(query.terms.getFirst()));
                         ObjectInputStream oIn = new ObjectInputStream(fIn); 
+                        
+                        //System.out.println("Reading from "+ readIndexPath +"_"+(query.terms.getFirst())); 
+                        
                         PostingsEntry tmpEntry = (PostingsEntry) oIn.readObject();
-                        while(tmpEntry != null){
-                            tmpList.add(tmpEntry);
-                            tmpEntry = (PostingsEntry) oIn.readObject();
-                        }
+                        try{
+                            while(tmpEntry != null){
+                                tmpList.add(tmpEntry);
+                                tmpEntry = (PostingsEntry) oIn.readObject();
+                            }
+                        } catch(Exception e){}; 
                         
                         return tmpList; 
                     } catch (FileNotFoundException ex) {
@@ -231,7 +260,7 @@ public class HashedIndex implements Index {
         {
             for(String term: query.terms){
                 if(writeToDisc){
-                    if(discIndexStreams.get(term) == null){
+                    if(!discIndexStreams.keySet().contains(query.terms.getFirst())){
                         return new PostingsList(); 
                     }
                 }
@@ -279,7 +308,14 @@ public class HashedIndex implements Index {
      * 
      */
     private PostingsList phraseQuery(Query query, int queryType, int rankingType, int structureType) {
-        return phraseSearch(query.terms); 
+        try { 
+            return phraseSearch(query.terms);
+        } catch (IOException ex) {
+            Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (ClassNotFoundException ex) {
+            Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return null;
     }
 
     private PostingsList rankedQuery(Query query, int queryType, int rankingType, int structureType) {
@@ -315,12 +351,6 @@ public class HashedIndex implements Index {
                 catch(Exception e){}
                 postingsFromDisc.add(i,list); 
                 postingsIterators.add(i, postingsFromDisc.get(i).iterator()); 
-                
-                //DEBUGZ0R
-                /*System.out.println("List size for " + searchWord + " " + list.size());
-                for(int k = 0; k < list.size(); k++){
-                    System.out.println("Document ID " + list.get(k).docID + " has word " + searchWord);
-                }*/
             }
             else{
                 postingsIterators.add(i, index.get(searchWord).getIterator());
@@ -361,15 +391,40 @@ public class HashedIndex implements Index {
         return postings; 
     }
     
-    private PostingsList phraseSearch(LinkedList<String> wordsInQuery) {
+    private PostingsList phraseSearch(LinkedList<String> wordsInQuery) throws FileNotFoundException, IOException, ClassNotFoundException {
         PostingsList postings = new PostingsList(); 
         PostingsEntry[] currentPostings = new PostingsEntry[wordsInQuery.size()]; 
         ArrayList<Iterator> postingsIterators = new ArrayList<Iterator>(); 
+        ArrayList<LinkedList<PostingsEntry>> postingsFromDisc = null; 
+        if(writeToDisc){
+            postingsFromDisc = new ArrayList<LinkedList<PostingsEntry>>(); 
+        }
         
         //Get iterators for each postingslist for each term
         int i = 0; 
         for(String searchWord: wordsInQuery){
-            postingsIterators.add(i, index.get(searchWord).getIterator());
+            if(writeToDisc){
+                LinkedList<PostingsEntry> list = new LinkedList<PostingsEntry>();
+                //FileInputStream fIn = new FileInputStream(discIndex.get(searchWord)); 
+                FileInputStream fIn = new FileInputStream(indexFilePath+"_"+searchWord);
+                //System.out.println("checking for file "+indexFilePath+"_"+searchWord); 
+                
+                ObjectInputStream oIn = new ObjectInputStream(fIn); 
+                PostingsEntry tmp = (PostingsEntry) oIn.readObject(); 
+                try{
+                    while(tmp != null){
+                        list.addLast(tmp); 
+                        tmp = (PostingsEntry) oIn.readObject(); 
+                    }
+                }
+                catch(Exception e){}
+                postingsFromDisc.add(i,list); 
+                postingsIterators.add(i, postingsFromDisc.get(i).iterator()); 
+            }
+            else{
+                postingsIterators.add(i, index.get(searchWord).getIterator());
+            }
+            //postingsIterators.add(i, index.get(searchWord).getIterator());
             PostingsEntry tmpPostingsEntry = (PostingsEntry) postingsIterators.get(i).next();
             currentPostings[i] = tmpPostingsEntry; 
             i++; 
@@ -400,12 +455,6 @@ public class HashedIndex implements Index {
                 boolean phraseMatch = false; 
                 HashSet<Integer> offsetsFirstWord = currentPostings[0].getOffsets(); 
                 
-                /*System.out.println("Offsets for first word:");
-                for(int os: offsetsFirstWord){
-                    System.out.print(os + ", "); 
-                }
-                System.out.println();*/
-                
                 for(int offset: offsetsFirstWord){
                     for(int k = 1; k < wordsInQuery.size(); k++){
                         //System.out.println("Is word " + wordsInQuery.get(k) + " at pos " + (offset+k)); 
@@ -415,7 +464,6 @@ public class HashedIndex implements Index {
                     }
                     if(phraseMatch) break; 
                 }
-                //System.out.println("PhraseMatch is "+ phraseMatch); 
                 if(phraseMatch)postings.add(new PostingsEntry(currentPostings[0].docID, 0));
             }
             if(postingsIterators.get(minIndex).hasNext()){

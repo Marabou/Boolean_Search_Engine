@@ -362,7 +362,7 @@ public class SearchGUI extends JFrame {
     /**
      *   Decodes the command line arguments.
      */
-    private void decodeArgs( String[] args ) {
+    private void decodeArgs( String[] args ) throws IOException {
 	int i=0, j=0;
         
         //Parameters
@@ -387,13 +387,13 @@ public class SearchGUI extends JFrame {
                 readIndex = true; 
                 i++;
                 readIndexPath = args[i++]; 
+                dirNames.add("data\\" + readIndexPath);
             }
 	    else {
 		System.err.println( "Unknown option: " + args[i] );
 		break;
 	    }
 	}
-        
         indexer = new Indexer(indexPath, writeToDisc, readIndexPath, readIndex); 
     }				    
 
@@ -401,7 +401,7 @@ public class SearchGUI extends JFrame {
     /* ----------------------------------------------- */
 
 
-    public static void main( String[] args ) {
+    public static void main( String[] args ) throws IOException {
 	SearchGUI s = new SearchGUI();
 	s.createGUI();
 	s.decodeArgs( args );

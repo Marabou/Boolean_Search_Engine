@@ -34,6 +34,8 @@ public class Indexer {
     
     /** The next docID to be generated. */
     private int lastDocID = 0;
+    
+    private boolean readIndex = false; 
 
 
     /* ----------------------------------------------- */
@@ -56,7 +58,8 @@ public class Indexer {
     /**
      *  Initializes the index as a HashedIndex.
      */
-    public Indexer(String indexPath, boolean writeToDisc, String readIndexPath, boolean readIndex) {
+    public Indexer(String indexPath, boolean writeToDisc, String readIndexPath, boolean readIndex) throws IOException {
+        this.readIndex = readIndex; 
         index = new HashedIndex(indexPath, writeToDisc, readIndexPath, readIndex); 
     }
 
@@ -78,15 +81,16 @@ public class Indexer {
 		    for ( int i=0; i<fs.length; i++ ) {
 			processFiles( new File( f, fs[i] ));
 		    }
-                    index.finalFlushAndCloseStreams(); 
+                    if(!readIndex)index.finalFlushAndCloseStreams();
 		};
 	    } else {
 		//System.err.println( "Indexing " + f.getPath() );
 		// First register the document and get a docID
 		int docID = generateDocID();
 		index.docIDs.put( "" + docID, f.getPath() );
+                if(readIndex) return; //return here. No reading required
 		try {
-		    //  Read the first few bytes of the file to see if it is 
+		    // Read the first few bytes of the file to see if it is 
 		    // likely to be a PDF 
 		    Reader reader = new FileReader( f );
 		    char[] buf = new char[4];
