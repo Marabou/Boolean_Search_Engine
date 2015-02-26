@@ -18,7 +18,7 @@ public class PostingsEntry implements Comparable<PostingsEntry>, Serializable {
     public double score;
     HashSet<Integer> positionsInDoc; 
 
-    public PostingsEntry(int docID, int score){
+    public PostingsEntry(int docID, double score){
         
         this.docID = docID; 
         this.score = score; 
@@ -55,6 +55,14 @@ public class PostingsEntry implements Comparable<PostingsEntry>, Serializable {
     
     public HashSet<Integer> getOffsets(){
         return positionsInDoc; 
+    }
+    
+    /**
+     * Returns the number of times term t occurs
+     * in this document
+     */
+    public int getTermFrequency(){
+        return positionsInDoc.size(); 
     }
     
 }

@@ -19,6 +19,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -35,6 +36,8 @@ public class HashedIndex implements Index {
 
     /** The index as a hashtable. */
     private HashMap<String,PostingsList> index = new HashMap<String,PostingsList>();
+    
+    //For writing to disc
     private HashMap<String,String> discIndex = new HashMap<String,String>(); //<word, filepath>
     private HashMap<String,ObjectOutputStream> discIndexStreams = new HashMap<String,ObjectOutputStream>(); //<word, filepath>
     
@@ -218,7 +221,7 @@ public class HashedIndex implements Index {
      *  Searches the index for postings matching the query.
      */
     public PostingsList search( Query query, int queryType, int rankingType, int structureType ) {
-        if(query.terms.size() == 1){
+        if(query.terms.size() == 1 && (queryType != 2)){
             if(writeToDisc){
                 //if(discIndexStreams.get(query.terms.getFirst()) != null){
                 if(discIndexStreams.keySet().contains(query.terms.getFirst())){
@@ -256,7 +259,7 @@ public class HashedIndex implements Index {
                     return new PostingsList(); 
             }
         }
-        else if(query.terms.size() > 1)
+        else if(query.terms.size() > 1 || (queryType == 2))
         {
             for(String term: query.terms){
                 if(writeToDisc){
@@ -283,8 +286,16 @@ public class HashedIndex implements Index {
             } 
                 case 1: //Phrase query
                     return phraseQuery(query, queryType, rankingType, structureType); 
-                case 2: //Ranked query
-                    return rankedQuery(query, queryType, rankingType, structureType); 
+                case 2: {
+                try {
+                    //Ranked query
+                    return rankedQuery(query, queryType, rankingType, structureType);
+                } catch (IOException ex) {
+                    Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ClassNotFoundException ex) {
+                    Logger.getLogger(HashedIndex.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            } 
                 default: 
                     return null; 
             }
@@ -318,9 +329,78 @@ public class HashedIndex implements Index {
         return null;
     }
 
-    private PostingsList rankedQuery(Query query, int queryType, int rankingType, int structureType) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    private PostingsList rankedQuery(Query query, int queryType, int rankingType, int structureType) throws IOException, FileNotFoundException, ClassNotFoundException {
+        PostingsList matchingDocuments = new PostingsList();
+        //Assignment 2.1
+        if(query.terms.size() == 1){
+            matchingDocuments = index.get(query.terms.getFirst()); 
+            for(int i = 0; i < matchingDocuments.size(); i++){
+                calculateTFIDF(matchingDocuments.get(i), query.terms.getFirst()); 
+            }
+            Collections.sort(matchingDocuments.getList());
+        }
+        //Assignment 2.2
+        else{
+            matchingDocuments = cosineScore(query.terms); 
+            Collections.sort(matchingDocuments.getList()); 
+        }
+        return matchingDocuments; 
     }
+    
+    /**
+     * Calculates the tf_idf of the a document
+     * @param matchingDocuments 
+     */
+    private void calculateTFIDF(PostingsEntry posting, String term) {
+        double idf = Math.log(docIDs.size()/index.get(term).size()); //ln(N/df_t)
+        int docLength = docLengths.get(""+posting.docID); 
+        int termFreq = posting.getTermFrequency(); 
+        posting.score = termFreq* idf / docLength; 
+    }
+    
+    /**
+     * 
+     * @param get
+     * @param terms 
+     */
+    private PostingsList cosineScore(LinkedList<String> terms) {
+        PostingsList rankedDocuments = new PostingsList(); 
+        HashMap<Integer, Double> scores = new HashMap<Integer, Double>(); 
+        for(String queryTerm: terms){
+           double queryScore = calculateQueryScore(queryTerm); 
+           PostingsList tmpPostingsList = index.get(queryTerm); 
+           for(int i = 0; i < tmpPostingsList.size(); i++){
+               int docID = tmpPostingsList.get(i).docID; 
+               double wfScore = calculateWfScore(tmpPostingsList.get(i), queryTerm); 
+               
+               if(scores.get(docID) == null){
+                   scores.put(docID, Double.valueOf(0)); 
+               }
+               double oldScore = scores.get(docID); 
+               double newScore = oldScore + (wfScore * queryScore); 
+               scores.put(docID, newScore); 
+           }
+       }
+       for(int docID: scores.keySet()){
+           rankedDocuments.add(new PostingsEntry(docID, scores.get(docID)));
+       }
+       return rankedDocuments; 
+    }
+    
+    /**
+     * Calculates w_t,q
+     * @return 
+     */
+    private double calculateQueryScore(String term){
+        double queryScore = Math.log(docIDs.size()/(index.get(term).size()));  
+        return queryScore; 
+    }
+    
+    private double calculateWfScore(PostingsEntry posting, String term){
+        double wfScore = ((double) posting.getTermFrequency())/(double)docLengths.get(""+posting.docID);
+        return wfScore; 
+    }
+    
 
     private PostingsList intersectionSearch(LinkedList<String> wordsInQuery) throws FileNotFoundException, IOException, ClassNotFoundException {
         PostingsList postings = new PostingsList(); 
@@ -452,14 +532,15 @@ public class HashedIndex implements Index {
             if(match) {
                 //System.out.println("Match on doc: " + currentPostings[0].docID); 
                 //Check if phrase occurs by going through iterators and checking offsets
-                boolean phraseMatch = false; 
+                boolean phraseMatch = true; 
                 HashSet<Integer> offsetsFirstWord = currentPostings[0].getOffsets(); 
                 
                 for(int offset: offsetsFirstWord){
+                    phraseMatch = true; 
                     for(int k = 1; k < wordsInQuery.size(); k++){
-                        //System.out.println("Is word " + wordsInQuery.get(k) + " at pos " + (offset+k)); 
-                        if(currentPostings[k].isAtPosition(offset+k)){
-                            phraseMatch = true;
+                        if(!currentPostings[k].isAtPosition(offset+k)){
+                            phraseMatch = false; 
+                            break; 
                         }
                     }
                     if(phraseMatch) break; 
