@@ -5,6 +5,7 @@
  *   First version:  Johan Boye, 2012
  */  
 
+import com.sun.javafx.css.CalculatedValue;
 import java.util.*;
 import java.io.*;
 
@@ -157,13 +158,121 @@ public class PageRank{
     /*
      *   Computes the pagerank of each document.
      */
-    void computePagerank( int numberOfDocs ) {
-	//
-	//   YOUR CODE HERE
-	//
+    void computePagerank( int numberOfDocs ) {     
+        
+	//Power iteration with c = 0.85
+        //Setting initial vector to the first vector 
+        double[] score = new double[numberOfDocs]; 
+        score[0] = 1;
+        double[] newScore = new double[numberOfDocs]; 
+        double[] diffScore = new double[numberOfDocs]; 
+        double c = 0.85;
+        double difference = 1; 
+        score[0] = 1.0;    //Starting position
+        double jcElement = (1.0-c)*(1.0/numberOfDocs); 
+        
+        //Initial difference
+        for(int i = 0; i < numberOfDocs; i++){
+            diffScore[i] = Math.abs(score[i] - newScore[i]);
+        }
+        difference = computeMagnitude(diffScore); 
+
+        while(difference > 0.0001){
+            for(int i = 0; i < numberOfDocs; i++){
+                double newProb = 0; 
+                double Gij = 0; 
+                for(int j = 0; j < numberOfDocs; j++){
+                    if(score[j] != 0){  //Will make the term zero anyway
+                        if(link.get(j) != null){
+                            if(link.get(j).get(i) != null){
+                                Gij = (c*1.0/((double) link.get(j).size())) + jcElement;  //c*Pij + (1-c)Jij 
+                            }
+                            else Gij = jcElement; 
+                        }
+                        else{
+                            Gij = (c*1.0/((double)( numberOfDocs-1.0))) + jcElement; 
+                        }
+                        newProb += score[j]*Gij;
+                    }
+                }
+                
+                newScore[i] = newProb; 
+                if(i%1000 == 0) System.out.println("NewProb for " +  " " + i + ": " + newProb); 
+            }
+            //Calculate the difference
+            for(int i = 0; i < numberOfDocs; i++){
+                diffScore[i] = Math.abs((score[i] - newScore[i])); 
+            }
+            difference = computeMagnitude(diffScore); 
+            System.out.println("Difference: " + difference);
+            
+            score = newScore.clone();   
+            
+        }
+        
+        ArrayList<scoreObject> scoreObjects = new ArrayList<scoreObject>(); 
+        for(int i = 0; i < score.length; i++){
+            scoreObjects.add(i, new scoreObject(docName[i], score[i]));
+        }
+        
+        Collections.sort(scoreObjects, Collections.reverseOrder());
+        int listSize = scoreObjects.size() >= 50 ? 50 : scoreObjects.size(); 
+        for(int i = 0; i < listSize; i++){
+            System.out.println((i+1) + " : " + scoreObjects.get(i).name + " " + scoreObjects.get(i).score); 
+        }
+        
     }
 
+    
+    double computeMagnitude(double[] diffScore){
+        double magnitude = 0; 
+        for(int i = 0; i < diffScore.length; i++){
+            magnitude += Math.pow(diffScore[i], 2.0); 
+        }
+        return Math.sqrt(magnitude); 
+    }
+    
+    
+    void printVector(double[] vector){
+        for(int i = 0; i < vector.length; i++){
+            System.out.print(vector[i] + ", ");
+        }
+        System.out.println(); 
+    }
+    
+    void normalize(double[] vector){
+        double sum = 0; 
+        for(int i = 0; i < vector.length; i++){
+            sum += vector[i]; 
+        }
+        double scaleFactor = 1.0/sum; 
+        
+        for(int i = 0; i < vector.length; i++){
+            vector[i] = vector[i]*scaleFactor; 
+        }
+    }
+    
+    void prinkLinks(){
+        for(Integer key: link.keySet()){
+            System.out.print(key + "; ");
+            for(Integer value: link.get(key).keySet()){
+                System.out.print(" " + value + ", ");
+            }
+            System.out.println(); 
+        }
+    }
 
+    
+    
+    void printNumberOfLinks(int docID){
+        int numberOfLinks = 0; 
+        for(int i: link.keySet()){
+            if(link.get(i) != null){
+                if(link.get(i).get(docID) != null && link.get(i).get(docID) == true) numberOfLinks++; 
+            }
+        }
+        System.out.println("Number of links to " + docName[docID] + " is: " + numberOfLinks);
+    }
     /* --------------------------------------------- */
 
 
@@ -175,4 +284,28 @@ public class PageRank{
 	    new PageRank( args[0] );
 	}
     }
+}
+
+/**
+ * For sorting
+ * @author alexn_000
+ */
+class scoreObject implements Comparable<scoreObject>{
+    public double score; 
+    public String name; 
+    
+    public scoreObject(String name, double score){
+        this.score = score; 
+        this.name = name; 
+    }
+
+    @Override
+    public int compareTo(scoreObject o) {
+        if(o.score == score) return 0; 
+        else if(o.score < score ) return 1; 
+        else return -1; 
+    }
+    
+    
+    
 }
